@@ -289,9 +289,11 @@ class YandexClient:
             data={"diff": _json.dumps(diff), "revision": revision},
         )
 
-    async def delete_playlist(self, playlist_id: str | int) -> dict[str, Any]:
+    async def delete_playlist(self, playlist_id: str | int) -> Any:
+        # Unlike the other playlist endpoints, delete's `result` is the
+        # literal string "ok", not a JSON object.
         owner, kind = await self._split_playlist_id(playlist_id)
-        return await self._request_dict("POST", f"/users/{owner}/playlists/{kind}/delete")
+        return await self._request("POST", f"/users/{owner}/playlists/{kind}/delete")
 
     async def rename_playlist(self, playlist_id: str | int, *, title: str) -> dict[str, Any]:
         owner, kind = await self._split_playlist_id(playlist_id)

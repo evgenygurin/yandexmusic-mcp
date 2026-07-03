@@ -128,9 +128,9 @@ class FakeYandexClient:
         self._record("modify_playlist", playlist_id, diff=diff, revision=revision)
         return {**RAW_PLAYLIST, "revision": revision + 1}
 
-    async def delete_playlist(self, playlist_id: str | int) -> dict[str, Any]:
+    async def delete_playlist(self, playlist_id: str | int) -> Any:
         self._record("delete_playlist", playlist_id)
-        return {"deleted": True}
+        return "ok"  # the real endpoint's `result` is the literal string "ok"
 
     async def get_liked_ids(self) -> list[str]:
         self._record("get_liked_ids")
@@ -150,6 +150,8 @@ class FakeYandexClient:
 
     async def api_get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         self._record("api_get", path, params=params)
+        if path == "/genres":
+            return [{"id": "rock"}, {"id": "rap"}]  # list-shaped `result`
         return {"path": path}
 
     async def close(self) -> None:  # lifespan closes the client on shutdown
@@ -322,7 +324,7 @@ async def test_delete_playlist_confirmed_via_elicitation(fake_client):
     async with Client(server.mcp, elicitation_handler=accept) as client:
         result = await client.call_tool("delete_playlist", {"playlist_id": "42:3"})
 
-    assert result.data == {"deleted": True}
+    assert result.data == {"deleted": True, "playlist_id": "42:3", "result": "ok"}
     assert ("delete_playlist", ("42:3",), {}) in fake_client.calls
 
 
@@ -412,6 +414,13 @@ async def test_yandex_api_get_escape_hatch(fake_client):
     async with Client(server.mcp) as client:
         result = await client.call_tool("yandex_api_get", {"path": "/landing3/new-releases"})
     assert result.data == {"path": "/landing3/new-releases"}
+
+
+async def test_yandex_api_get_wraps_list_results(fake_client):
+    """List-shaped results (e.g. /genres) are wrapped so structured content survives."""
+    async with Client(server.mcp) as client:
+        result = await client.call_tool("yandex_api_get", {"path": "/genres"})
+    assert result.data == {"result": [{"id": "rock"}, {"id": "rap"}]}
 
 
 async def test_read_only_mode_hides_and_blocks_write_tools(fake_client):

@@ -374,7 +374,8 @@ async def delete_playlist(playlist_id: PlaylistId, ctx: Context | None = None) -
             answer = None  # client doesn't support elicitation — annotation already warns
         if isinstance(answer, DeclinedElicitation | CancelledElicitation):
             return {"cancelled": True, "playlist_id": playlist_id}
-    return await get_client().delete_playlist(playlist_id)
+    result = await get_client().delete_playlist(playlist_id)
+    return {"deleted": True, "playlist_id": playlist_id, "result": result}
 
 
 @mcp.tool(tags={"likes", "write"}, annotations=WRITE)
@@ -444,9 +445,14 @@ async def yandex_api_get(
         ),
     ],
     params: Annotated[dict[str, Any] | None, Field(description="Extra query parameters")] = None,
-) -> Any:
-    """Call any read-only (GET) Yandex Music API endpoint — raw response."""
-    return await get_client().api_get(path, params)
+) -> dict[str, Any]:
+    """Call any read-only (GET) Yandex Music API endpoint — raw response.
+
+    Non-object results (lists like /genres, scalars) are wrapped as
+    {"result": …} so the tool always returns structured content.
+    """
+    result = await get_client().api_get(path, params)
+    return result if isinstance(result, dict) else {"result": result}
 
 
 # ---------------------------------------------------------------------------
