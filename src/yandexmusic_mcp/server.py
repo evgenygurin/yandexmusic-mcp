@@ -216,17 +216,19 @@ async def get_album(
 @mcp.tool(tags={"catalog"}, annotations=READ_ONLY)
 async def get_artist_tracks(
     artist_id: str,
-    offset: Annotated[int, Field(ge=0, description="Pagination offset")] = 0,
+    page: SearchPage = 0,
     limit: Limit = 50,
 ) -> m.TrackPage:
     """List an artist's tracks (popularity order, paginated)."""
-    data = await get_client().get_artist_tracks(artist_id, offset=offset, limit=limit)
+    # The endpoint paginates by page, not offset — expose `page` directly so
+    # callers can't request an offset that silently rounds down to a page.
+    data = await get_client().get_artist_tracks(artist_id, offset=page * limit, limit=limit)
     raw = list(data.get("tracks") or [])
     pager = data.get("pager") or {}
     total = pager.get("total")
     return m.TrackPage(
         total=int(total) if total is not None else None,
-        page=offset // limit,
+        page=page,
         results=[fmt.slim_track(t) for t in raw],
     )
 
@@ -407,7 +409,12 @@ async def download_track(
     this server. Streams progress when the client supports it.
     """
     settings = Settings.from_env()
-    dest = settings.download_dir / (filename or f"{track_id}.mp3")
+    download_dir = settings.download_dir.resolve()
+    dest = (download_dir / (filename or f"{track_id}.mp3")).resolve()
+    if not dest.is_relative_to(download_dir):
+        raise ValueError(
+            f"filename must resolve inside the download dir ({download_dir}); got {filename!r}"
+        )
 
     async def on_progress(received: int, total: int | None) -> None:
         if ctx is not None:

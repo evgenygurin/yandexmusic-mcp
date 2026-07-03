@@ -87,7 +87,17 @@ class YandexClient:
         return cast(dict[str, Any], await self._request(method, path, **kwargs))
 
     async def api_get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """Escape hatch: GET any API path, returning the unwrapped ``result``."""
+        """Escape hatch: GET any API path, returning the unwrapped ``result``.
+
+        Only API-relative paths are accepted. An absolute or protocol-relative
+        URL would bypass ``base_url`` while the shared client still attaches
+        the ``Authorization: OAuth …`` header — i.e. token exfiltration to an
+        arbitrary host through a read-only tool.
+        """
+        merged = self._http.base_url.join(path)
+        base = self._http.base_url
+        if (merged.scheme, merged.host, merged.port) != (base.scheme, base.host, base.port):
+            raise APIError(f"path must be relative to {base}: got {path!r}")
         return await self._request("GET", path, params=params or {})
 
     # ---------- account ---------- #

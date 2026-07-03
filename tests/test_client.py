@@ -124,6 +124,27 @@ def test_build_signed_mp3_url_rejects_bad_manifest() -> None:
         YandexClient._build_signed_mp3_url("<download-info><host>h</host></download-info>")
 
 
+async def test_api_get_allows_relative_paths(fake_api: FakeYandexAPI, client: YandexClient) -> None:
+    fake_api.routes["GET /landing3/new-releases"] = {"ok": True}
+    assert await client.api_get("/landing3/new-releases") == {"ok": True}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "https://attacker.example/collect",
+        "http://attacker.example/collect",
+        "//attacker.example/collect",
+        "https://api.music.yandex.net:8443/tracks",
+    ],
+)
+async def test_api_get_rejects_offsite_urls(client: YandexClient, path: str) -> None:
+    """The shared client carries the OAuth header — an absolute URL would
+    exfiltrate the token to an arbitrary host through a read-only tool."""
+    with pytest.raises(APIError, match="must be relative"):
+        await client.api_get(path)
+
+
 async def test_close_is_idempotent(client: YandexClient) -> None:
     await client.close()
     await client.close()  # must not raise

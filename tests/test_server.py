@@ -366,6 +366,26 @@ async def test_download_track_writes_file_and_reports_progress(fake_client, tmp_
     assert seen[-1] == (12, 12)
 
 
+@pytest.mark.parametrize("filename", ["../escape.mp3", "/tmp/abs.mp3", "a/../../b.mp3"])
+async def test_download_track_rejects_traversal_filenames(
+    fake_client, tmp_path, monkeypatch, filename
+):
+    monkeypatch.setenv("YANDEX_MUSIC_DOWNLOAD_DIR", str(tmp_path / "dl"))
+    async with Client(server.mcp) as client:
+        with pytest.raises(Exception, match="download dir"):
+            await client.call_tool("download_track", {"track_id": "100", "filename": filename})
+    assert not any(c[0] == "download_track" for c in fake_client.calls)  # nothing written
+
+
+async def test_get_artist_tracks_paginates_by_page(fake_client):
+    async with Client(server.mcp) as client:
+        result = await client.call_tool(
+            "get_artist_tracks", {"artist_id": "7", "page": 2, "limit": 10}
+        )
+    assert result.data.page == 2
+    assert ("get_artist_tracks", ("7",), {"offset": 20, "limit": 10}) in fake_client.calls
+
+
 async def test_resources_read_via_fake_client(fake_client):
     async with Client(server.mcp) as client:
         likes = await client.read_resource("yandexmusic://likes")
